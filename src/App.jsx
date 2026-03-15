@@ -252,7 +252,23 @@ export default function App() {
             )
           })}
         </div>
-        <button style={st.btn} onClick={fetchSubmissions}>Refresh</button>
+        <div style={{ marginBottom: '16px' }}>
+  <div style={st.sectionLabel}>Weekly trend</div>
+  <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: '8px', padding: '16px', marginTop: '10px' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px', justifyContent: 'space-between' }}>
+      {['Mon','Tue','Wed','Thu','Fri'].map((day, i) => {
+        const heights = [85, 70, 90, 60, 80]
+        return (
+          <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: '6px' }}>
+            <div style={{ width: '100%', background: i === new Date().getDay() - 1 ? c.green : '#2a2a2e', borderRadius: '3px', height: `${heights[i]}%` }}></div>
+            <div style={{ fontSize: '10px', color: c.muted }}>{day}</div>
+          </div>
+        )
+      })}
+    </div>
+  </div>
+</div>
+```
       </div>
     </div>
   )

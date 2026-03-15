@@ -257,13 +257,4 @@ export default function App() {
     </div>
   )
 }
-```
 
-**File → Save**, then push to GitHub and Vercel will auto-update!
-
-To push updates type these in Command Prompt:
-```
-cd %USERPROFILE%\Documents\gilmanton-lunch
-git add .
-git commit -m "new design"
-git push

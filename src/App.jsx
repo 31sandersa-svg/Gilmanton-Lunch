@@ -22,6 +22,7 @@ export default function App() {
   const [submissions, setSubmissions] = useState([])
   const [loading, setLoading] = useState(false)
   const [allergyStudents, setAllergyStudents] = useState([])
+  const [weeklyData, setWeeklyData] = useState([0,0,0,0,0])
 
   useEffect(() => { fetchClasses() }, [])
 
@@ -46,6 +47,28 @@ export default function App() {
     const today = new Date().toISOString().split('T')[0]
     const { data } = await supabase.from('Lunch Submissions').select('*').eq('submission_date', today)
     if (data) setSubmissions(data)
+  }
+
+  async function fetchWeeklyData() {
+    const now = new Date()
+    const day = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1))
+    const days = []
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(monday)
+      d.setDate(monday.getDate() + i)
+      days.push(d.toISOString().split('T')[0])
+    }
+    const { data } = await supabase
+      .from('Lunch Submissions')
+      .select('submission_date, total_lunches')
+      .in('submission_date', days)
+    const totals = days.map(date => {
+      const dayData = data ? data.filter(s => s.submission_date === date) : []
+      return dayData.reduce((sum, s) => sum + (s.total_lunches || 0), 0)
+    })
+    setWeeklyData(totals)
   }
 
   async function fetchAllergyStudents(currentClasses) {
@@ -112,6 +135,7 @@ export default function App() {
       if (cls) setClasses(cls)
       await fetchSubmissions()
       await fetchAllergyStudents(cls)
+      await fetchWeeklyData()
       setScreen('office')
       setError('')
     } else {
@@ -134,6 +158,7 @@ export default function App() {
     if (cls) setClasses(cls)
     await fetchSubmissions()
     await fetchAllergyStudents(cls)
+    await fetchWeeklyData()
   }
 
   const lunchCount = students.filter(s => checked[s.id]).length
@@ -308,7 +333,7 @@ export default function App() {
         )}
 
         <div style={st.sectionLabel}>Class submissions</div>
-        <div style={{ ...st.list, marginTop: '10px', marginBottom: '16px' }}>
+        <div style={{ ...st.list, marginTop: '10px', marginBottom: '20px' }}>
           {classes.map((cl, i) => {
             const sub = submissions.find(s => s.class_id == cl.id)
             return (
@@ -324,15 +349,17 @@ export default function App() {
           })}
         </div>
 
-        <div style={{ ...st.list, background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-          <div style={{ ...st.sectionLabel, marginBottom: '12px' }}>Weekly trend</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px', justifyContent: 'space-between' }}>
+        <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+          <div style={{ ...st.sectionLabel, marginBottom: '16px' }}>Weekly trend</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px' }}>
             {['Mon','Tue','Wed','Thu','Fri'].map((day, i) => {
-              const heights = [85, 70, 90, 60, 80]
+              const max = Math.max(...weeklyData, 1)
+              const height = Math.round((weeklyData[i] / max) * 100)
               const isToday = i === new Date().getDay() - 1
               return (
-                <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: '6px', height: '100%' }}>
-                  <div style={{ width: '100%', background: isToday ? c.green : '#2a2a2e', borderRadius: '3px', height: `${heights[i]}%`, marginTop: 'auto' }}></div>
+                <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: '4px', height: '100%' }}>
+                  {weeklyData[i] > 0 && <div style={{ fontSize: '9px', color: c.muted }}>{weeklyData[i]}</div>}
+                  <div style={{ width: '100%', background: isToday ? c.green : '#2a2a2e', borderRadius: '3px', height: height > 0 ? `${height}%` : '4px', marginTop: 'auto' }}></div>
                   <div style={{ fontSize: '10px', color: c.muted }}>{day}</div>
                 </div>
               )

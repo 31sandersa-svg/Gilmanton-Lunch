@@ -21,7 +21,7 @@ export default function App() {
   const [submitted, setSubmitted] = useState(false)
   const [submissions, setSubmissions] = useState([])
   const [loading, setLoading] = useState(false)
-const [allergyStudents, setAllergyStudents] = useState([])
+  const [allergyStudents, setAllergyStudents] = useState([])
 
   useEffect(() => { fetchClasses() }, [])
 
@@ -47,14 +47,14 @@ const [allergyStudents, setAllergyStudents] = useState([])
     const { data } = await supabase.from('Lunch Submissions').select('*').eq('submission_date', today)
     if (data) setSubmissions(data)
   }
-async function fetchAllergyStudents() {
+
+  async function fetchAllergyStudents(currentClasses) {
     const today = new Date().toISOString().split('T')[0]
     const { data: todaySubs } = await supabase
       .from('Lunch Submissions')
       .select('*')
       .eq('submission_date', today)
     if (!todaySubs || todaySubs.length === 0) return
-    const classIds = todaySubs.map(s => s.class_id)
     const { data: orders } = await supabase
       .from('Lunch Orders')
       .select('student_id, submission_id')
@@ -71,9 +71,10 @@ async function fetchAllergyStudents() {
       .in('id', hotLunchStudentIds)
       .eq('allergies', 'yes')
     if (allergicStudents) {
+      const cls = currentClasses || classes
       const withClassName = allergicStudents.map(s => ({
         ...s,
-        className: classes.find(c => c.id === s.class_id)?.Class || ''
+        className: cls.find(c => c.id === s.class_id)?.Class || ''
       }))
       setAllergyStudents(withClassName)
     }
@@ -102,10 +103,20 @@ async function fetchAllergyStudents() {
     setLoading(false)
   }
 
-  function handleLogin() {
-    if (password === TEACHER_PASSWORD) { setScreen('teacher'); setError('') }
-    else if (password === OFFICE_PASSWORD) { fetchSubmissions(); fetchAllergyStudents(); setScreen('office'); setError('') }
-    else { setError('Incorrect password') }
+  async function handleLogin() {
+    if (password === TEACHER_PASSWORD) {
+      setScreen('teacher')
+      setError('')
+    } else if (password === OFFICE_PASSWORD) {
+      const { data: cls } = await supabase.from('Classes').select('*')
+      if (cls) setClasses(cls)
+      await fetchSubmissions()
+      await fetchAllergyStudents(cls)
+      setScreen('office')
+      setError('')
+    } else {
+      setError('Incorrect password')
+    }
   }
 
   function toggleAll() {
@@ -116,6 +127,13 @@ async function fetchAllergyStudents() {
       students.forEach(s => all[s.id] = true)
       setChecked(all)
     }
+  }
+
+  async function handleRefresh() {
+    const { data: cls } = await supabase.from('Classes').select('*')
+    if (cls) setClasses(cls)
+    await fetchSubmissions()
+    await fetchAllergyStudents(cls)
   }
 
   const lunchCount = students.filter(s => checked[s.id]).length
@@ -215,8 +233,8 @@ async function fetchAllergyStudents() {
                   <div style={st.avatar}>{getInitials(student.name)}</div>
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '14px' }}>{student.name}</span>
-                    {student.allergies && student.allergies.toLowerCase() !== 'none' && student.allergies.trim() !== '' && (
-                      <span style={{ fontSize: '10px', background: c.redBg, color: '#c07070', borderRadius: '3px', padding: '2px 6px' }}>{student.allergies}</span>
+                    {student.allergies && student.allergies.toLowerCase() === 'yes' && (
+                      <span style={{ fontSize: '10px', background: c.redBg, color: '#c07070', borderRadius: '3px', padding: '2px 6px' }}>Allergy</span>
                     )}
                   </div>
                   <div style={{ ...st.checkbox, background: checked[student.id] ? c.text : 'transparent', border: checked[student.id] ? 'none' : `0.5px solid #3a3a3e` }}>
@@ -267,26 +285,28 @@ async function fetchAllergyStudents() {
             <div style={st.statLabel}>Waiting</div>
           </div>
         </div>
-{allergyStudents.length > 0 && (
-  <div style={{ marginBottom: '20px' }}>
-    <div style={st.sectionLabel}>Allergy alert — hot lunch today</div>
-    <div style={{ border: '0.5px solid #3a1e1e', background: '#1e1010', borderRadius: '8px', overflow: 'hidden', marginTop: '10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderBottom: '0.5px solid #3a1e1e' }}>
-        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#c07070' }}></div>
-        <div style={{ fontSize: '11px', color: '#c07070', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{allergyStudents.length} student{allergyStudents.length !== 1 ? 's' : ''} with allergies ordering hot lunch</div>
-      </div>
-      {allergyStudents.map((s, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: i === allergyStudents.length - 1 ? 'none' : '0.5px solid #2a1e1e' }}>
-          <div>
-            <div style={{ fontSize: '13px', color: '#d0d0d0' }}>{s.name}</div>
-            <div style={{ fontSize: '11px', color: '#666' }}>{s.className}</div>
+
+        {allergyStudents.length > 0 && (
+          <div style={{ marginBottom: '20px' }}>
+            <div style={st.sectionLabel}>Allergy alert — hot lunch today</div>
+            <div style={{ border: '0.5px solid #3a1e1e', background: '#1e1010', borderRadius: '8px', overflow: 'hidden', marginTop: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderBottom: '0.5px solid #3a1e1e' }}>
+                <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#c07070' }}></div>
+                <div style={{ fontSize: '11px', color: '#c07070', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{allergyStudents.length} student{allergyStudents.length !== 1 ? 's' : ''} with allergies ordering hot lunch</div>
+              </div>
+              {allergyStudents.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: i === allergyStudents.length - 1 ? 'none' : '0.5px solid #2a1e1e' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#d0d0d0' }}>{s.name}</div>
+                    <div style={{ fontSize: '11px', color: '#666' }}>{s.className}</div>
+                  </div>
+                  <div style={{ fontSize: '10px', background: '#2a1515', color: '#c07070', borderRadius: '3px', padding: '2px 8px', fontWeight: '500' }}>Allergy</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ fontSize: '10px', background: '#2a1515', color: '#c07070', borderRadius: '3px', padding: '2px 8px', fontWeight: '500' }}>Allergy</div>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+        )}
+
         <div style={st.sectionLabel}>Class submissions</div>
         <div style={{ ...st.list, marginTop: '10px', marginBottom: '16px' }}>
           {classes.map((cl, i) => {
@@ -303,24 +323,26 @@ async function fetchAllergyStudents() {
             )
           })}
         </div>
-        <div style={{ marginBottom: '16px' }}>
-  <div style={st.sectionLabel}>Weekly trend</div>
-  <div style={{ background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: '8px', padding: '16px', marginTop: '10px' }}>
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px', justifyContent: 'space-between' }}>
-      {['Mon','Tue','Wed','Thu','Fri'].map((day, i) => {
-        const heights = [85, 70, 90, 60, 80]
-        return (
-          <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: '6px' }}>
-            <div style={{ width: '100%', background: i === new Date().getDay() - 1 ? c.green : '#2a2a2e', borderRadius: '3px', height: `${heights[i]}%` }}></div>
-            <div style={{ fontSize: '10px', color: c.muted }}>{day}</div>
+
+        <div style={{ ...st.list, background: c.surface, border: `0.5px solid ${c.border}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+          <div style={{ ...st.sectionLabel, marginBottom: '12px' }}>Weekly trend</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px', justifyContent: 'space-between' }}>
+            {['Mon','Tue','Wed','Thu','Fri'].map((day, i) => {
+              const heights = [85, 70, 90, 60, 80]
+              const isToday = i === new Date().getDay() - 1
+              return (
+                <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: '6px', height: '100%' }}>
+                  <div style={{ width: '100%', background: isToday ? c.green : '#2a2a2e', borderRadius: '3px', height: `${heights[i]}%`, marginTop: 'auto' }}></div>
+                  <div style={{ fontSize: '10px', color: c.muted }}>{day}</div>
+                </div>
+              )
+            })}
           </div>
-        )
-      })}
-    </div>
-  </div>
-</div>
-```
+        </div>
+
+        <button style={st.btn} onClick={handleRefresh}>Refresh</button>
       </div>
     </div>
   )
 }
+```

@@ -21,6 +21,7 @@ export default function App() {
   const [submitted, setSubmitted] = useState(false)
   const [submissions, setSubmissions] = useState([])
   const [loading, setLoading] = useState(false)
+const [allergyStudents, setAllergyStudents] = useState([])
 
   useEffect(() => { fetchClasses() }, [])
 
@@ -45,6 +46,37 @@ export default function App() {
     const today = new Date().toISOString().split('T')[0]
     const { data } = await supabase.from('Lunch Submissions').select('*').eq('submission_date', today)
     if (data) setSubmissions(data)
+  }
+async function fetchAllergyStudents() {
+    const today = new Date().toISOString().split('T')[0]
+    const { data: todaySubs } = await supabase
+      .from('Lunch Submissions')
+      .select('*')
+      .eq('submission_date', today)
+    if (!todaySubs || todaySubs.length === 0) return
+    const classIds = todaySubs.map(s => s.class_id)
+    const { data: orders } = await supabase
+      .from('Lunch Orders')
+      .select('student_id, submission_id')
+      .eq('wants_lunch', true)
+    if (!orders) return
+    const submissionIds = todaySubs.map(s => s.id)
+    const hotLunchStudentIds = orders
+      .filter(o => submissionIds.includes(o.submission_id))
+      .map(o => o.student_id)
+    if (hotLunchStudentIds.length === 0) return
+    const { data: allergicStudents } = await supabase
+      .from('Students')
+      .select('name, class_id')
+      .in('id', hotLunchStudentIds)
+      .eq('allergies', 'yes')
+    if (allergicStudents) {
+      const withClassName = allergicStudents.map(s => ({
+        ...s,
+        className: classes.find(c => c.id === s.class_id)?.Class || ''
+      }))
+      setAllergyStudents(withClassName)
+    }
   }
 
   async function handleSubmit() {
@@ -72,7 +104,7 @@ export default function App() {
 
   function handleLogin() {
     if (password === TEACHER_PASSWORD) { setScreen('teacher'); setError('') }
-    else if (password === OFFICE_PASSWORD) { fetchSubmissions(); setScreen('office'); setError('') }
+    else if (password === OFFICE_PASSWORD) { fetchSubmissions(); fetchAllergyStudents(); setScreen('office'); setError('') }
     else { setError('Incorrect password') }
   }
 
@@ -235,7 +267,26 @@ export default function App() {
             <div style={st.statLabel}>Waiting</div>
           </div>
         </div>
-
+{allergyStudents.length > 0 && (
+  <div style={{ marginBottom: '20px' }}>
+    <div style={st.sectionLabel}>Allergy alert — hot lunch today</div>
+    <div style={{ border: '0.5px solid #3a1e1e', background: '#1e1010', borderRadius: '8px', overflow: 'hidden', marginTop: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderBottom: '0.5px solid #3a1e1e' }}>
+        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#c07070' }}></div>
+        <div style={{ fontSize: '11px', color: '#c07070', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{allergyStudents.length} student{allergyStudents.length !== 1 ? 's' : ''} with allergies ordering hot lunch</div>
+      </div>
+      {allergyStudents.map((s, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: i === allergyStudents.length - 1 ? 'none' : '0.5px solid #2a1e1e' }}>
+          <div>
+            <div style={{ fontSize: '13px', color: '#d0d0d0' }}>{s.name}</div>
+            <div style={{ fontSize: '11px', color: '#666' }}>{s.className}</div>
+          </div>
+          <div style={{ fontSize: '10px', background: '#2a1515', color: '#c07070', borderRadius: '3px', padding: '2px 8px', fontWeight: '500' }}>Allergy</div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
         <div style={st.sectionLabel}>Class submissions</div>
         <div style={{ ...st.list, marginTop: '10px', marginBottom: '16px' }}>
           {classes.map((cl, i) => {
